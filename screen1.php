@@ -71,13 +71,20 @@ window.onclick = function(event) {
 <script src="js/jquery-3.3.1.min.js"></script>
 <script type="text/javascript">
 	var funRequest = function( option, callback ){
+		httpGet("api.php?tablename=" + option.tablename, callback);
+	}
+	var funInsertHasil = function(option, callback) {
+		var buildQuerystring = Object.keys(option).map(( objName ) => { return objName + '=' + option[objName]; }).join('&');
+		httpGet("insert.php?" + buildQuerystring, callback);
+	};
+	var httpGet = function(url, callback){
 		var xmlhttp = new XMLHttpRequest();
 		xmlhttp.onreadystatechange = function() {
 		  if (this.readyState == 4 && this.status == 200) {
 		    callback( JSON.parse(this.responseText) );	    
 		  }
 		};
-		xmlhttp.open("GET", "api.php?tablename=" + option.tablename, true);
+		xmlhttp.open("GET", url, true);
 		xmlhttp.send();
 	}
 </script>
@@ -93,6 +100,7 @@ var states = [
 ];
 var flagReadyToWeight = false;
 var ID_DEVICE = 1;
+
 funRequest({tablename: 'formula'}, function( formula ){
 	var formulaByProductName = {};
 	formula.rows.forEach(function(e){
@@ -101,12 +109,19 @@ funRequest({tablename: 'formula'}, function( formula ){
 	funRequest({tablename:'status'}, function( status ){
 		var currentUrutanTimbang = status.rows[0]['No Urut'];
 		var currentNamaProduk = status.rows[0]['Nama Produk Aktif'];
+
 		if( (currentNamaProduk + "-" + currentUrutanTimbang) in formulaByProductName ) {
+
 			if( formulaByProductName[currentNamaProduk + "-" + currentUrutanTimbang]['no_timbangan'] == ID_DEVICE.toString() ) {
-				$('.top-nameBrand').text(formulaByProductName[currentNamaProduk + "-" + currentUrutanTimbang]['nama_produk']);
-				$('.top-materialName').text(formulaByProductName[currentNamaProduk + "-" + currentUrutanTimbang]['nama_material']);
-				$('.weight-num-target').text(formulaByProductName[currentNamaProduk + "-" + currentUrutanTimbang]['netto']);
+				var currentProductName = formulaByProductName[currentNamaProduk + "-" + currentUrutanTimbang]['nama_produk']; 
+				var currentMaterialName = formulaByProductName[currentNamaProduk + "-" + currentUrutanTimbang]['nama_material'];
+				var currentWeightTarget = formulaByProductName[currentNamaProduk + "-" + currentUrutanTimbang]['netto'];
+				$('.top-nameBrand').text(currentProductName);
+				$('.top-materialName').text(currentMaterialName);
+				$('.weight-num-target').text(currentWeightTarget);
 				flagReadyToWeight = true;
+				weightData['nama_produk'] = currentProductName;
+				weightData['nama_material'] = currentMaterialName;
 				currentState = 'zero';
 			} else {
 				flagReadyToWeight = false;
@@ -117,9 +132,9 @@ funRequest({tablename: 'formula'}, function( formula ){
 	});
 });
 
-if( flagReadyToWeight ) {
+main = function( ){
 	var valueTimbangan = $('.weight-num-aktual').text() * 1;
-	main = function( ){
+	if( flagReadyToWeight ) {
 		switch (currentState) {
 			case 'idle':
 				$('.command-content').text('Idle');
@@ -150,6 +165,28 @@ if( flagReadyToWeight ) {
 		} 
 	}
 }
+
+$('.myBtn').on('click', function(){
+	var valueTimbangan = $('.weight-num-aktual').text() * 1;
+	var targetTimbangan = $('.weight-num-target').text() * 1;
+	var toleransi = 0.1; //Kg
+	if( valueTimbangan <= (targetTimbangan + toleransi) && valueTimbangan >= (targetTimbangan - toleransi) ) {
+		var data = {
+			'nama_produk': weightData['nama_produk'],
+			'nama_material': weightData['nama_material'],
+			'netto': valueTimbangan,
+			'tara': weightData['Tara'],
+			'jam_timbang': new Date().toISOString(),
+			'No Timbangan': ID_DEVICE
+		};
+		localStorage.setItem('lastWeight', JSON.stringify(data));
+		funInsertHasil(data, function(){
+			alert('Sukses');
+			location.reload();
+		});
+	}
+});
+
 </script>
 <script type="text/javascript">
 	var client = new Paho.MQTT.Client("127.0.0.1", 15675,"/ws", "clientId");
